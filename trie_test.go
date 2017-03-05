@@ -59,6 +59,18 @@ func TestPrefixSearch(t *testing.T) {
 	}
 }
 
+func TestExactSearch(t *testing.T) {
+	query := "zygon"
+	node := tree.Get(query)
+	if node.GetText() != query {
+		t.Error("Node not found")
+	}
+
+	if tree.Get("zygo") != nil {
+		t.Error("Should be nil object")
+	}
+}
+
 func contains(words []string, word string) bool {
 	for _, w := range words {
 		if w == word {
@@ -74,8 +86,8 @@ func TestLevenshteinSearch(t *testing.T) {
 		distance int
 	}{
 		{"accidens", []QueryResult{
-			{"accidens", 0},
-			{"accident", 1},
+			{"accidens", 0, nil},
+			{"accident", 1, nil},
 		}, 1},
 	}
 	for _, e := range expected {
@@ -95,4 +107,33 @@ func containsq(results []QueryResult, word string) bool {
 		}
 	}
 	return false
+}
+
+func TestTreeWithMeta(t *testing.T) {
+	r := NewTrie()
+	r.Add("romane", 1)
+	r.Add("romanus", 2)
+	r.Add("romulus", 3)
+	r.Add("ruber", 4)
+	r.Add("rubens", 5)
+	r.Add("rubicon", 6)
+	r.Add("rubicundus", 7)
+
+	meta := r.Get("ruber").GetInfo()
+	if meta.(int) != 4 {
+		t.Error("Metadata not match")
+	}
+
+	qs := r.Levenshtein("rubycon", 1)
+	meta = qs[0].Node.GetInfo()
+
+	if meta.(int) != 6 {
+		t.Error("Metadata not match")
+	}
+
+	r.Add("ruber", 10)
+	meta = r.Get("ruber").GetInfo()
+	if meta.(int) != 10 {
+		t.Error("Metadata not match")
+	}
 }

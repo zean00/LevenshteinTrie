@@ -1,6 +1,32 @@
 LevenshteinTrie
 ===============
 
+Change : Add support for metadata / information on inserted node
+
+###Additional API
+```
+//Insert text with metadata
+t.Add("word",10)
+t.Add("another",struct{}{})
+
+//Get node from exact word 
+node := t.Get("word")
+//Get metadata from node
+info := node.GetInfo()
+text := node.GetText()
+
+//QueryResult with node
+results := t.Levenshtein("crave", 1)
+node := results[0].Node
+
+//Get nodes from suffix search
+var nodes []*TrieNode
+nodes := t.NodesSuffix("cratyl")
+for _, n := range nodes {
+	fmt.Println(n.GetText())
+}
+```
+
 A Trie data structure that allows for fuzzy string matching
 
 This is the Go version of a python program written by Steve Hanov in his [blog post](http://stevehanov.ca/blog/index.php?id=114)
@@ -44,7 +70,7 @@ func main() {
 		}
 
 		t.InsertText(line)
-	}
+	} 
 	results := t.Suffix("cratyl")
 	fmt.Println(results)
 	results2 := t.Levenshtein("crave", 1)

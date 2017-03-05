@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-func Min(a ...int) int {
+func min(a ...int) int {
 	min := int(^uint(0) >> 1) // largest int
 	for _, i := range a {
 		if i < min {
@@ -16,7 +16,8 @@ func Min(a ...int) int {
 	}
 	return min
 }
-func Max(a ...int) int {
+
+func max(a ...int) int {
 	max := int(0)
 	for _, i := range a {
 		if i > max {
@@ -26,31 +27,35 @@ func Max(a ...int) int {
 	return max
 }
 
+//TrieNode trie structure
 type TrieNode struct {
 	letter   rune //Equivalent to int32
 	children map[rune]*TrieNode
 	final    bool
 	text     string
+	meta     interface{}
 }
 
 func (t *TrieNode) String() string {
-	s := fmt.Sprintf("%#U\n", t.letter)
+	s := fmt.Sprintf("%U\n", t.letter)
 	for _, v := range t.children {
-		s += fmt.Sprintf("-%#U\n", v)
+		s += fmt.Sprintf("-%#v\n", v)
 	}
 	return s
 }
 
+//NewTrie create new Levenshtein trie
 func NewTrie() *TrieNode {
 	return &TrieNode{children: make(map[rune]*TrieNode)}
 }
 
-func (root *TrieNode) InsertText(text string) {
-	if root == nil {
+//Add add node with metadata
+func (t *TrieNode) Add(text string, meta interface{}) {
+	if t == nil {
 		return
 	}
 	text = strings.ToLower(text)
-	currNode := root //Starts at root
+	currNode := t //Starts at root
 	for i, w := 0, 0; i < len(text); i += w {
 		runeValue, width := utf8.DecodeRuneInString(text[i:])
 		final := false
@@ -59,24 +64,66 @@ func (root *TrieNode) InsertText(text string) {
 		}
 		w = width
 
-		currNode = NewTrieNode(currNode, runeValue, final, text)
+		currNode = newTrieNode(currNode, runeValue, final, text, meta)
 	}
 }
 
-func NewTrieNode(t *TrieNode, runeValue rune, final bool, text string) *TrieNode {
-	node, exists := t.children[runeValue]
-	if !exists {
-		node = &TrieNode{letter: runeValue, children: make(map[rune]*TrieNode)}
-		t.children[runeValue] = node
-	}
-	if final {
-		node.final = true
-		node.text = text
-	}
-	return node
+//GetInfo get node metadata
+func (t *TrieNode) GetInfo() interface{} {
+	return t.meta
 }
 
+//GetText get text string
+func (t *TrieNode) GetText() string {
+	return t.text
+}
+
+//InsertText insert text as node
+func (t *TrieNode) InsertText(text string) {
+	if t == nil {
+		return
+	}
+	text = strings.ToLower(text)
+	currNode := t //Starts at root
+	for i, w := 0, 0; i < len(text); i += w {
+		runeValue, width := utf8.DecodeRuneInString(text[i:])
+		final := false
+		if width+i == len(text) {
+			final = true
+		}
+		w = width
+
+		currNode = newTrieNode(currNode, runeValue, final, text, nil)
+	}
+}
+
+//Get node with exact string
+func (t *TrieNode) Get(text string) *TrieNode {
+	ns := t.NodesSuffix(text)
+	if len(ns) == 0 {
+		return nil
+	}
+
+	for _, v := range ns {
+		if v.text == text {
+			return v
+		}
+	}
+	return nil
+}
+
+//Suffix query on suffix
 func (t *TrieNode) Suffix(query string) []string {
+	ns := t.NodesSuffix(query)
+	result := make([]string, len(ns))
+	for i, v := range ns {
+		result[i] = v.text
+	}
+	return result
+}
+
+//NodesSuffix query node on suffix
+func (t *TrieNode) NodesSuffix(query string) []*TrieNode {
 	var curr *TrieNode
 	var ok bool
 
@@ -99,14 +146,33 @@ func (t *TrieNode) Suffix(query string) []string {
 	return candidates
 }
 
-func getsuffixr(n *TrieNode) []string {
+func newTrieNode(t *TrieNode, runeValue rune, final bool, text string, meta interface{}) *TrieNode {
+	node, exists := t.children[runeValue]
+	if meta == nil {
+		meta = text
+	}
+	if !exists {
+		node = &TrieNode{letter: runeValue, children: make(map[rune]*TrieNode), meta: meta}
+		t.children[runeValue] = node
+	} else {
+		node.meta = meta
+	}
+	if final {
+		node.final = true
+		node.text = text
+	}
+	return node
+}
+
+func getsuffixr(n *TrieNode) []*TrieNode {
 	if n == nil {
 		return nil
 	}
 
-	candidates := make([]string, 0)
+	var candidates []*TrieNode
+
 	if n.final == true {
-		candidates = append(candidates, n.text)
+		candidates = append(candidates, n)
 	}
 
 	for _, childNode := range n.children {
@@ -115,22 +181,25 @@ func getsuffixr(n *TrieNode) []string {
 	return candidates
 }
 
+//QueryResult query result
 type QueryResult struct {
 	Val      string
 	Distance int
+	Node     *TrieNode
 }
 
 func (q QueryResult) String() string {
 	return fmt.Sprintf("Val: %s, Dist: %d\n", q.Val, q.Distance)
 }
 
-type ByDistance []QueryResult
+type byDistance []QueryResult
 
-func (a ByDistance) Len() int           { return len(a) }
-func (a ByDistance) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByDistance) Less(i, j int) bool { return a[i].Distance < a[j].Distance }
+func (a byDistance) Len() int           { return len(a) }
+func (a byDistance) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byDistance) Less(i, j int) bool { return a[i].Distance < a[j].Distance }
 
-func (n *TrieNode) Levenshtein(text string, distance int) []QueryResult {
+//Levenshtein query with Levenshtein distance
+func (t *TrieNode) Levenshtein(text string, distance int) []QueryResult {
 
 	//initialize the first row for the dynamic programming alg
 	l := utf8.RuneCount([]byte(text))
@@ -140,13 +209,13 @@ func (n *TrieNode) Levenshtein(text string, distance int) []QueryResult {
 		currentRow[i] = i
 	}
 
-	candidates := make([]QueryResult, 0)
+	var candidates []QueryResult
 
-	for letter, childNode := range n.children {
+	for letter, childNode := range t.children {
 		candidates = append(candidates, searchlevr(childNode, currentRow, letter, []rune(text), distance)...)
 	}
 
-	sort.Sort(ByDistance(candidates))
+	sort.Sort(byDistance(candidates))
 	return candidates
 }
 
@@ -165,16 +234,16 @@ func searchlevr(n *TrieNode, prevRow []int, letter rune, text []rune, maxDistanc
 		deleteCost := prevRow[col] + 1
 		replaceCost := prevRow[col-1] + 1
 
-		currentRow[col] = Min(insertCost, deleteCost, replaceCost)
+		currentRow[col] = min(insertCost, deleteCost, replaceCost)
 	}
 
-	candidates := make([]QueryResult, 0)
+	var candidates []QueryResult
 
 	distance := currentRow[len(currentRow)-1]
 	if distance <= maxDistance && n.final == true {
-		candidates = append(candidates, QueryResult{Val: n.text, Distance: distance})
+		candidates = append(candidates, QueryResult{Val: n.text, Distance: distance, Node: n})
 	}
-	mi := Min(currentRow[1:]...)
+	mi := min(currentRow[1:]...)
 	if mi <= maxDistance {
 		for l, childNode := range n.children {
 			candidates = append(candidates, searchlevr(childNode, currentRow, l, text, maxDistance)...)
